@@ -64,7 +64,7 @@
 
   let numberOfAssets = $derived(data.statistics.assets);
   let person = $derived(data.person);
-  const altNames = $derived(person.otherPeople.map(({ name }) => name).filter(Boolean));
+  const altItems = $derived(person.otherPeople.filter(({ name }) => !!name));
   let thumbnailData = $derived(getPeopleThumbnailUrl(person));
 
   let timelineManager = $state<TimelineManager>() as TimelineManager;
@@ -392,37 +392,27 @@
                       {person.name || $t('add_a_name')}
                     </p>
                   </button>
-                  {#if altNames.length > 0}
+                  {#if altItems.length > 0}
                     <p class="text-sm text-gray-500 dark:text-gray-400">
-                      aka {#each altNames.slice(0, -1) as altName, index (index + altName)}
+                      aka {#each altItems as altItem, i (altItem.sharedById)}
                         {@const hasEditingPermissions = [PersonUserRole.Write, PersonUserRole.Admin].includes(
-                          person.otherPeople[index].role,
+                          altItem.role,
                         )}
                         {#if hasEditingPermissions}
                           <button
                             type="button"
                             onclick={() =>
-                              modalManager.show(SharedPersonEditModal, { person, otherPeopleIndex: index })}
-                            class="underline">{altName}</button
+                              modalManager.show(SharedPersonEditModal, { person, targetUserId: altItem.sharedById })}
+                            class="underline">{altItem.name}</button
                           >
                         {:else}
-                          {altName}
+                          {altItem.name}
                         {/if}
-                        {altNames.length > 2 ? ',' : ''}
+                        {altItems.length > 2 ? ',' : ''}
+                        {#if altItems.length > 1 && i === altItems.length - 2}
+                          and
+                        {/if}
                       {/each}
-                      {#if altNames.length > 1}
-                        and
-                      {/if}
-                      {#if [PersonUserRole.Write, PersonUserRole.Admin].includes(person.otherPeople.at(-1)!.role)}
-                        <button
-                          type="button"
-                          onclick={() =>
-                            modalManager.show(SharedPersonEditModal, { person, otherPeopleIndex: altNames.length - 1 })}
-                          class="underline">{altNames.at(-1)}</button
-                        >
-                      {:else}
-                        {altNames.at(-1)}
-                      {/if}
                     </p>
                   {/if}
                   <p class="text-sm text-gray-500 dark:text-gray-400">
@@ -532,8 +522,9 @@
     {#if viewMode === PersonPageViewMode.VIEW_ASSETS}
       <ControlAppBar backIcon={mdiArrowLeft} onClose={() => goto(previousRoute)}>
         {#snippet trailing()}
+          <ActionButton action={Share} />
           <ContextMenuButton
-            items={[SelectFeaturePhoto, HidePerson, ShowPerson, SetDateOfBirth, Merge, Favorite, Unfavorite, Share]}
+            items={[SelectFeaturePhoto, HidePerson, ShowPerson, SetDateOfBirth, Merge, Favorite, Unfavorite]}
             aria-label={$t('open')}
           />
         {/snippet}

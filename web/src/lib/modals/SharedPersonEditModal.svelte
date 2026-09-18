@@ -1,84 +1,118 @@
 <script lang="ts">
-  import UserAvatar from '$lib/components/shared-components/UserAvatar.svelte';
-  import { getUser, type PersonResponseDto } from '@immich/sdk';
-  import {
-    ActionButton,
-    type ActionItem,
-    Card,
-    CardHeader,
-    Checkbox,
-    DatePicker,
-    Field,
-    FormModal,
-    HelperText,
-    HStack,
-    Input,
-    Label,
-    Text,
-    VStack,
-  } from '@immich/ui';
-  import { mdiContentPaste, mdiText } from '@mdi/js';
+  import { authManager } from '$lib/managers/auth-manager.svelte';
+  import { handleUpdatePerson } from '$lib/services/person.service';
+  import { searchUsers, type PersonResponseDto, type UserResponseDto } from '@immich/sdk';
+  import { Button, Checkbox, DatePicker, Field, FormModal, HelperText, Input, Label, Select, VStack } from '@immich/ui';
+  import { mdiAccountMultipleOutline, mdiText } from '@mdi/js';
   import { DateTime } from 'luxon';
+  import { onMount } from 'svelte';
   import { t } from 'svelte-i18n';
 
   type Props = {
     person: PersonResponseDto;
-    otherPeopleIndex: number;
+    targetUserId?: string;
     onClose: () => void;
   };
 
-  let { person, otherPeopleIndex, onClose }: Props = $props();
+  let { person, targetUserId: initialTargetUserId, onClose }: Props = $props();
 
-  const otherPerson = person.otherPeople![otherPeopleIndex];
+  let users = $state<UserResponseDto[]>([]);
+  let targetUserId = $state(initialTargetUserId ?? authManager.user.id);
 
-  const copyToPersonAction: ActionItem = {
-    onAction: () => {},
-    title: 'Copy from my person',
-    icon: mdiContentPaste,
+  let targetPerson = $state<{ name: string; birthDate: string | null; sharedById: string | null }>({
+    name: '',
+    birthDate: null,
+    sharedById: null,
+  });
+
+  const candidates = $derived([
+    { name: person.name, birthDate: person.birthDate, sharedById: authManager.user.id },
+    ...(person.otherPeople ?? []),
+  ]);
+
+  const loadUsers = async () => {
+    users = await searchUsers();
   };
+
+  onMount(async () => {
+    await loadUsers();
+    onChange(targetUserId);
+  });
 
   let applyToEveryone = $state(false);
 
-  const onSubmit = async () => {};
+  const onSubmit = async () => {
+    const success = await handleUpdatePerson(person.id, {
+      name: targetPerson.name,
+      birthDate: targetPerson.birthDate,
+      userId: targetPerson.sharedById ?? undefined,
+    });
+
+    if (success) {
+      onClose();
+    }
+  };
+
+  const handleCopyFromMine = () => {
+    targetPerson.name = person.name;
+    targetPerson.birthDate = person.birthDate;
+  };
+
+  const onChange = (value: string) => {
+    targetUserId = value;
+    const match = candidates.find((person) => person.sharedById === value);
+    if (match) {
+      targetPerson.name = match.name;
+      targetPerson.birthDate = match.birthDate;
+      targetPerson.sharedById = match.sharedById;
+    }
+  };
 </script>
 
-{#await getUser({ id: otherPerson.ownerId }) then owner}
-  <FormModal title="Shared person" size="small" icon={mdiText} {onClose} {onSubmit}>
-    <Card color="info">
-      <CardHeader class="pb-4">
-        <HStack gap={4}>
-          <UserAvatar user={owner} size="md" />
-          <VStack gap={0} class="items-start">
-            <Text>
-              {owner.name}
-            </Text>
-            <Text size="small" color="muted">{owner.email}</Text>
-          </VStack>
-        </HStack>
-      </CardHeader>
-    </Card>
-    <hr class="my-4" />
-    <VStack>
-      <ActionButton type="button" variant="outline" action={copyToPersonAction} />
-      <Field label={$t('name')}>
-        <Input bind:value={otherPerson.name} />
-      </Field>
+<FormModal title="Shared person" size="small" icon={mdiText} {onClose} {onSubmit}>
+  <VStack>
+    <Field label="User">
+      <Select
+        value={targetUserId}
+        options={candidates.map((person) => ({
+          label: users.find((user) => user.id === person.sharedById)?.name ?? person.sharedById,
+          value: person.sharedById,
+        }))}
+        onChange={(value) => onChange(value)}
+      />
+      <HelperText>View and edit fields for this user.</HelperText>
+    </Field>
 
-      <Field label={$t('date_of_birth')}>
-        <DatePicker
-          bind:value={
-            () => (otherPerson.birthDate ? DateTime.fromISO(otherPerson.birthDate) : undefined),
-            (value) => (otherPerson.birthDate = value?.toISO() ?? null)
-          }
-          maxDate={DateTime.now()}
-        />
-        <HelperText>{$t('birthdate_set_description')}</HelperText>
-      </Field>
+    <div class="mx-auto">
+      <Button
+        size="small"
+        color="secondary"
+        class="mt-2"
+        shape="round"
+        variant="outline"
+        leadingIcon={mdiAccountMultipleOutline}
+        onclick={handleCopyFromMine}>Copy from my person</Button
+      >
+    </div>
 
-      <div class="flex w-full items-start gap-2">
-        <Label label="Apply to all people?" for="apply-to-all-people-checkbox" />
-        <Checkbox id="apply-to-all-people-checkbox" color="secondary" bind:checked={applyToEveryone} />
-      </div>
-    </VStack>
-  </FormModal>
-{/await}
+    <Field label={$t('name')}>
+      <Input bind:value={targetPerson.name} />
+    </Field>
+
+    <Field label={$t('date_of_birth')}>
+      <DatePicker
+        bind:value={
+          () => (targetPerson.birthDate ? DateTime.fromISO(targetPerson.birthDate) : undefined),
+          (value) => (targetPerson.birthDate = value?.toISO() ?? null)
+        }
+        maxDate={DateTime.now()}
+      />
+      <HelperText>{$t('birthdate_set_description')}</HelperText>
+    </Field>
+
+    <div class="flex w-full items-start gap-2">
+      <Label label="Apply to all people?" for="apply-to-all-people-checkbox" />
+      <Checkbox id="apply-to-all-people-checkbox" color="secondary" bind:checked={applyToEveryone} />
+    </div>
+  </VStack>
+</FormModal>

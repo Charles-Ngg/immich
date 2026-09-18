@@ -31,6 +31,7 @@ const PersonCreateSchema = z
 
 const PersonUpdateSchema = PersonCreateSchema.extend({
   featureFaceAssetId: z.uuidv4().optional().describe('Asset ID used for feature face thumbnail'),
+  userId: z.uuid().optional().describe('User ID'),
 }).meta({ id: 'PersonUpdateDto' });
 
 const PeopleUpdateItemSchema = PersonUpdateSchema.extend({
@@ -92,12 +93,10 @@ export const PersonResponseSchema = z
       .optional()
       .describe('Person color (hex)')
       .meta(new HistoryBuilder().added('v1.126.0').stable('v2').getExtensions()),
-    // TODO should maybe be replaced by a permissions array
-    isShared: z.boolean(),
     // TODO should maybe be a `z.array(BasePersonSchema)`?
     otherPeople: z.array(
       z.object({
-        sharedWithId: z.uuid(),
+        sharedById: z.uuid(),
         name: z.string(),
         birthDate: z.string().nullable(),
         role: PersonUserRoleSchema,
@@ -134,6 +133,7 @@ const AssetFaceUpdateItemSchema = z
   .object({
     personId: z.uuidv4().describe('Person ID'),
     assetId: z.uuidv4().describe('Asset ID'),
+    userId: z.uuidv4().optional().describe('User ID'),
   })
   .meta({ id: 'AssetFaceUpdateItem' });
 
@@ -185,13 +185,13 @@ const PersonShareResponseSchema = z
 const PersonShareRequestSchema = z
   .object({
     personIds: z.array(z.uuid()),
-    sharedWithId: z.uuid(),
+    sharedWithIds: z.array(z.uuid()),
     role: PersonUserRoleSchema,
   })
   .meta({ id: 'PersonShareRequestDto' });
 
 const PersonUserDeleteRequestSchema = z
-  .array(z.object({ personId: z.uuid(), sharedWithId: z.uuid() }))
+  .array(z.object({ personId: z.uuid(), sharedWithId: z.uuid(), sharedById: z.uuid().optional() }))
   .meta({ id: 'PersonUserDeleteRequestDto' });
 
 export class AssetFaceUpdateDto extends createZodDto(AssetFaceUpdateSchema) {}
@@ -228,7 +228,6 @@ export function mapPerson(person: MaybeDehydrated<Person>): PersonResponseDto {
     isFavorite: person.isFavorite,
     color: person.color ?? undefined,
     updatedAt: asDateTimeString(person.updatedAt),
-    isShared: false,
     otherPeople: person.otherPeople ?? [],
   };
 }

@@ -96,3 +96,5 @@
 1787148183730-DeleteMismatchedMemoryAssets
 1789419229196-ConvertUserOAuthIdEmptyStringToNull
 1789662239975-AddPersonUserTable
+1790012260049-PersonUserAfterInsertTrigger
+1790014260785-PersonDeleteSharesTrigger
